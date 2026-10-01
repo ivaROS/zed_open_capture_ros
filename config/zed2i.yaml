@@ -6,6 +6,14 @@
     calibration_file: ""
     left_frame_id: zed_left_camera_optical_frame
     right_frame_id: zed_right_camera_optical_frame
+    left_camera_frame_id: zed_left_camera_frame
+    right_camera_frame_id: zed_right_camera_frame
     imu_frame_id: zed_imu_link
     publish_synchronized_imu: true
+    publish_magnetometer: true
     publish_stereo_tf: true
+    publish_camera_imu_tf: true
+    # ZED SDK 5.5 factory transform read from camera SN 39494516.
+    camera_imu_calibration_serial: 39494516
+    camera_imu_translation: [-0.002000000095, -0.023061001673, 0.000217000023]
+    camera_imu_rotation_xyzw: [0.000153178014, 0.002542372094, 0.001893442124, 0.999994874001]

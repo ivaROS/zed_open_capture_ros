@@ -3,6 +3,7 @@
 #include <sensor_msgs/msg/camera_info.hpp>
 #include <sensor_msgs/msg/image.hpp>
 #include <sensor_msgs/msg/imu.hpp>
+#include <sensor_msgs/msg/magnetic_field.hpp>
 #include <tf2_ros/static_transform_broadcaster.h>
 
 #include <opencv2/opencv.hpp>
@@ -20,10 +21,12 @@
 #include <stdexcept>
 #include <string>
 #include <thread>
+#include <vector>
 
 namespace {
 
 constexpr double kDegreesToRadians = 3.14159265358979323846 / 180.0;
+constexpr double kMicroteslaToTesla = 1.0e-6;
 
 builtin_interfaces::msg::Time toRosStamp(std::uint64_t timestamp_ns)
 {
@@ -127,10 +130,25 @@ public:
       declare_parameter<std::string>("left_frame_id", "zed_left_camera_optical_frame");
     right_frame_id_ =
       declare_parameter<std::string>("right_frame_id", "zed_right_camera_optical_frame");
+    left_camera_frame_id_ =
+      declare_parameter<std::string>("left_camera_frame_id", "zed_left_camera_frame");
+    right_camera_frame_id_ =
+      declare_parameter<std::string>("right_camera_frame_id", "zed_right_camera_frame");
     imu_frame_id_ = declare_parameter<std::string>("imu_frame_id", "zed_imu_link");
     publish_synchronized_imu_ =
       declare_parameter<bool>("publish_synchronized_imu", true);
+    publish_magnetometer_ = declare_parameter<bool>("publish_magnetometer", true);
     const bool publish_stereo_tf = declare_parameter<bool>("publish_stereo_tf", true);
+    const bool publish_camera_imu_tf =
+      declare_parameter<bool>("publish_camera_imu_tf", true);
+    const int camera_imu_calibration_serial =
+      declare_parameter<int>("camera_imu_calibration_serial", 0);
+    const std::vector<double> camera_imu_translation =
+      declare_parameter<std::vector<double>>(
+      "camera_imu_translation", {0.0, 0.0, 0.0});
+    const std::vector<double> camera_imu_rotation_xyzw =
+      declare_parameter<std::vector<double>>(
+      "camera_imu_rotation_xyzw", {0.0, 0.0, 0.0, 1.0});
 
     sl_oc::video::VideoParams params;
     params.res = parseResolution(resolution);
@@ -184,18 +202,67 @@ public:
     right_info_ = makeCameraInfo(
       right_projection, image_width_, image_height_, right_frame_id_, true);
 
-    if (publish_stereo_tf) {
+    if (publish_stereo_tf || publish_camera_imu_tf) {
       static_tf_broadcaster_ =
         std::make_shared<tf2_ros::StaticTransformBroadcaster>(this);
-      geometry_msgs::msg::TransformStamped stereo_tf;
-      stereo_tf.header.stamp = get_clock()->now();
-      stereo_tf.header.frame_id = left_frame_id_;
-      stereo_tf.child_frame_id = right_frame_id_;
-      // The published images are rectified, so their optical frames are
-      // parallel and separated only by the factory-calibrated baseline.
-      stereo_tf.transform.translation.x = baseline_mm / 1000.0;
-      stereo_tf.transform.rotation.w = 1.0;
-      static_tf_broadcaster_->sendTransform(stereo_tf);
+    }
+
+    const auto tf_stamp = get_clock()->now();
+    if (publish_stereo_tf) {
+      std::vector<geometry_msgs::msg::TransformStamped> stereo_transforms;
+
+      geometry_msgs::msg::TransformStamped left_optical_tf;
+      left_optical_tf.header.stamp = tf_stamp;
+      left_optical_tf.header.frame_id = left_camera_frame_id_;
+      left_optical_tf.child_frame_id = left_frame_id_;
+      left_optical_tf.transform.rotation.x = -0.5;
+      left_optical_tf.transform.rotation.y = 0.5;
+      left_optical_tf.transform.rotation.z = -0.5;
+      left_optical_tf.transform.rotation.w = 0.5;
+      stereo_transforms.push_back(left_optical_tf);
+
+      geometry_msgs::msg::TransformStamped right_camera_tf;
+      right_camera_tf.header.stamp = tf_stamp;
+      right_camera_tf.header.frame_id = left_camera_frame_id_;
+      right_camera_tf.child_frame_id = right_camera_frame_id_;
+      // Rectification produces parallel camera frames. In ROS FLU, the right
+      // camera lies along negative Y from the left camera.
+      right_camera_tf.transform.translation.y = -baseline_mm / 1000.0;
+      right_camera_tf.transform.rotation.w = 1.0;
+      stereo_transforms.push_back(right_camera_tf);
+
+      geometry_msgs::msg::TransformStamped right_optical_tf;
+      right_optical_tf.header.stamp = tf_stamp;
+      right_optical_tf.header.frame_id = right_camera_frame_id_;
+      right_optical_tf.child_frame_id = right_frame_id_;
+      right_optical_tf.transform.rotation = left_optical_tf.transform.rotation;
+      stereo_transforms.push_back(right_optical_tf);
+
+      static_tf_broadcaster_->sendTransform(stereo_transforms);
+    }
+
+    if (publish_camera_imu_tf) {
+      if (camera_imu_calibration_serial != serial_number) {
+        throw std::runtime_error(
+                "camera_imu_calibration_serial does not match the connected camera");
+      }
+      if (camera_imu_translation.size() != 3 || camera_imu_rotation_xyzw.size() != 4) {
+        throw std::runtime_error(
+                "camera-IMU translation must have 3 values and rotation must have 4 values");
+      }
+
+      geometry_msgs::msg::TransformStamped camera_imu_tf;
+      camera_imu_tf.header.stamp = tf_stamp;
+      camera_imu_tf.header.frame_id = left_camera_frame_id_;
+      camera_imu_tf.child_frame_id = imu_frame_id_;
+      camera_imu_tf.transform.translation.x = camera_imu_translation[0];
+      camera_imu_tf.transform.translation.y = camera_imu_translation[1];
+      camera_imu_tf.transform.translation.z = camera_imu_translation[2];
+      camera_imu_tf.transform.rotation.x = camera_imu_rotation_xyzw[0];
+      camera_imu_tf.transform.rotation.y = camera_imu_rotation_xyzw[1];
+      camera_imu_tf.transform.rotation.z = camera_imu_rotation_xyzw[2];
+      camera_imu_tf.transform.rotation.w = camera_imu_rotation_xyzw[3];
+      static_tf_broadcaster_->sendTransform(camera_imu_tf);
     }
 
     const auto image_qos = rclcpp::SensorDataQoS().keep_last(1);
@@ -211,6 +278,9 @@ public:
     imu_pub_ = create_publisher<sensor_msgs::msg::Imu>("imu/data_raw", imu_qos);
     if (publish_synchronized_imu_) {
       sync_imu_pub_ = create_publisher<sensor_msgs::msg::Imu>("imu/data_sync", imu_qos);
+    }
+    if (publish_magnetometer_) {
+      mag_pub_ = create_publisher<sensor_msgs::msg::MagneticField>("imu/mag", imu_qos);
     }
 
     RCLCPP_INFO(
@@ -302,21 +372,47 @@ private:
     return msg;
   }
 
+  sensor_msgs::msg::MagneticField makeMagneticField(
+    const sl_oc::sensors::data::Magnetometer & sample) const
+  {
+    sensor_msgs::msg::MagneticField msg;
+    msg.header.stamp = toRosStamp(sample.timestamp);
+    msg.header.frame_id = imu_frame_id_;
+
+    // Open Capture supplies uncalibrated microtesla in the same native sensor
+    // axes as the IMU. Convert to tesla and the ROS REP-103 FLU frame only.
+    msg.magnetic_field.x = -sample.mZ * kMicroteslaToTesla;
+    msg.magnetic_field.y = -sample.mY * kMicroteslaToTesla;
+    msg.magnetic_field.z = -sample.mX * kMicroteslaToTesla;
+    msg.magnetic_field_covariance[0] = -1.0;
+    return msg;
+  }
+
   void imuLoop()
   {
-    std::uint64_t last_timestamp = 0;
+    std::uint64_t last_imu_timestamp = 0;
+    std::uint64_t last_mag_timestamp = 0;
     while (rclcpp::ok() && running_.load()) {
       const auto & sample = sensor_capture_->getLastIMUData(5000);
-      if (sample.valid != sl_oc::sensors::data::Imu::NEW_VAL ||
-        sample.timestamp == 0 || sample.timestamp == last_timestamp)
+      if (sample.valid == sl_oc::sensors::data::Imu::NEW_VAL &&
+        sample.timestamp != 0 && sample.timestamp != last_imu_timestamp)
       {
-        continue;
+        last_imu_timestamp = sample.timestamp;
+        auto msg = makeImu(sample);
+        imu_pub_->publish(msg);
+        if (sample.sync && sync_imu_pub_) {
+          sync_imu_pub_->publish(std::move(msg));
+        }
       }
-      last_timestamp = sample.timestamp;
-      auto msg = makeImu(sample);
-      imu_pub_->publish(msg);
-      if (sample.sync && sync_imu_pub_) {
-        sync_imu_pub_->publish(std::move(msg));
+
+      if (mag_pub_) {
+        const auto & mag_sample = sensor_capture_->getLastMagnetometerData(100);
+        if (mag_sample.valid == sl_oc::sensors::data::Magnetometer::NEW_VAL &&
+          mag_sample.timestamp != 0 && mag_sample.timestamp != last_mag_timestamp)
+        {
+          last_mag_timestamp = mag_sample.timestamp;
+          mag_pub_->publish(makeMagneticField(mag_sample));
+        }
       }
     }
   }
@@ -331,8 +427,11 @@ private:
   int image_height_ = 0;
   std::string left_frame_id_;
   std::string right_frame_id_;
+  std::string left_camera_frame_id_;
+  std::string right_camera_frame_id_;
   std::string imu_frame_id_;
   bool publish_synchronized_imu_ = true;
+  bool publish_magnetometer_ = true;
   cv::Mat left_map_x_;
   cv::Mat left_map_y_;
   cv::Mat right_map_x_;
@@ -346,6 +445,7 @@ private:
   rclcpp::Publisher<sensor_msgs::msg::CameraInfo>::SharedPtr right_info_pub_;
   rclcpp::Publisher<sensor_msgs::msg::Imu>::SharedPtr imu_pub_;
   rclcpp::Publisher<sensor_msgs::msg::Imu>::SharedPtr sync_imu_pub_;
+  rclcpp::Publisher<sensor_msgs::msg::MagneticField>::SharedPtr mag_pub_;
   std::shared_ptr<tf2_ros::StaticTransformBroadcaster> static_tf_broadcaster_;
 };
 
