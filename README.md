@@ -36,15 +36,15 @@ Install its ROS dependencies and build it:
 cd ~/ros2_ws
 source /opt/ros/jazzy/setup.bash
 rosdep install --from-paths src/zed_open_capture_ros \
-  --ignore-src -r -y --skip-keys zed_wrapper
+  --ignore-src -r -y
 colcon build --symlink-install --packages-select zed_open_capture_ros
 source install/setup.bash
 ```
 
-`zed_wrapper` is skipped here because it is only used by the optional
-`lightgpu.launch.py` launch file. ZED Open Capture and HIDAPI are downloaded at
-the pinned revisions by CMake during the first build, so they do not need to be
-cloned separately.
+`zed_wrapper` is not a dependency of the standalone package. It is required
+only when using the optional `lightgpu.launch.py` launch file. ZED Open Capture
+and HIDAPI are downloaded at the pinned revisions by CMake during the first
+build, so they do not need to be cloned separately.
 
 Connect the camera and launch rectified stereo images and sensors:
 
