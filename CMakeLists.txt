@@ -70,6 +70,7 @@ set_target_properties(zed_open_capture_vendor PROPERTIES
 )
 
 add_executable(zed_open_capture_node src/zed_open_capture_node.cpp)
+add_executable(stereo_splitter_node src/stereo_splitter_node.cpp)
 target_compile_features(zed_open_capture_node PRIVATE cxx_std_17)
 target_compile_options(zed_open_capture_node PRIVATE -Wall -Wextra -Wpedantic)
 target_include_directories(zed_open_capture_node SYSTEM PRIVATE
@@ -88,12 +89,18 @@ target_link_libraries(zed_open_capture_node
   zed_open_capture_vendor
   ${OpenCV_LIBS}
 )
+target_compile_features(stereo_splitter_node PRIVATE cxx_std_17)
+target_compile_options(stereo_splitter_node PRIVATE -Wall -Wextra -Wpedantic)
+ament_target_dependencies(stereo_splitter_node rclcpp sensor_msgs)
 
-install(TARGETS zed_open_capture_node
+install(TARGETS zed_open_capture_node stereo_splitter_node
   RUNTIME DESTINATION lib/${PROJECT_NAME}
 )
-install(DIRECTORY launch config
+install(DIRECTORY launch config rviz
   DESTINATION share/${PROJECT_NAME}
+)
+install(PROGRAMS scripts/record_stereo.sh
+  DESTINATION lib/${PROJECT_NAME}
 )
 
 ament_package()

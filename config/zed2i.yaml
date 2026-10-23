@@ -3,6 +3,11 @@
     device_id: -1
     resolution: HD720
     frame_rate: 30
+    # none, slam_mono, or stereo_color. The latter two publish one atomic,
+    # side-by-side rectified image for balanced rosbag recording.
+    recording_mode: none
+    # Complete pairs buffered between capture and the reliable rosbag topic.
+    recording_queue_depth: 4
     calibration_file: ""
     left_frame_id: zed_left_camera_optical_frame
     right_frame_id: zed_right_camera_optical_frame

@@ -15,9 +15,12 @@
 #include <atomic>
 #include <chrono>
 #include <cmath>
+#include <condition_variable>
 #include <cstdint>
 #include <cstring>
+#include <deque>
 #include <memory>
+#include <mutex>
 #include <stdexcept>
 #include <string>
 #include <thread>
@@ -97,19 +100,27 @@ sensor_msgs::msg::CameraInfo makeCameraInfo(
 
 sensor_msgs::msg::Image makeImage(
   const cv::Mat & image, const builtin_interfaces::msg::Time & stamp,
-  const std::string & frame_id)
+  const std::string & frame_id, const std::string & encoding)
 {
   sensor_msgs::msg::Image msg;
   msg.header.stamp = stamp;
   msg.header.frame_id = frame_id;
   msg.height = static_cast<std::uint32_t>(image.rows);
   msg.width = static_cast<std::uint32_t>(image.cols);
-  msg.encoding = "bgr8";
+  msg.encoding = encoding;
   msg.is_bigendian = false;
   msg.step = static_cast<std::uint32_t>(image.cols * image.elemSize());
   const std::size_t bytes = static_cast<std::size_t>(msg.step) * msg.height;
   msg.data.resize(bytes);
-  std::memcpy(msg.data.data(), image.data, bytes);
+  if (image.isContinuous()) {
+    std::memcpy(msg.data.data(), image.data, bytes);
+  } else {
+    for (int row = 0; row < image.rows; ++row) {
+      std::memcpy(
+        msg.data.data() + static_cast<std::size_t>(row) * msg.step,
+        image.ptr(row), msg.step);
+    }
+  }
   return msg;
 }
 
@@ -124,6 +135,20 @@ public:
     const int device_id = declare_parameter<int>("device_id", -1);
     const std::string resolution = declare_parameter<std::string>("resolution", "HD720");
     const int frame_rate = declare_parameter<int>("frame_rate", 30);
+    recording_mode_ = declare_parameter<std::string>("recording_mode", "none");
+    const auto recording_queue_depth = declare_parameter<int>(
+      "recording_queue_depth", 4);
+    if (recording_queue_depth < 1) {
+      throw std::invalid_argument("recording_queue_depth must be positive");
+    }
+    recording_queue_depth_ = static_cast<std::size_t>(recording_queue_depth);
+    if (
+      recording_mode_ != "none" && recording_mode_ != "slam_mono" &&
+      recording_mode_ != "stereo_color")
+    {
+      throw std::invalid_argument(
+              "recording_mode must be none, slam_mono, or stereo_color");
+    }
     const std::string calibration_override =
       declare_parameter<std::string>("calibration_file", "");
     left_frame_id_ =
@@ -275,6 +300,22 @@ public:
       "left/camera_info", image_qos);
     right_info_pub_ = create_publisher<sensor_msgs::msg::CameraInfo>(
       "right/camera_info", image_qos);
+    // The low-latency atomic stream is published directly from the capture
+    // thread. The reliable recording stream is isolated behind a bounded
+    // worker queue, so a slow recorder cannot stall camera acquisition.
+    const auto live_stereo_qos = rclcpp::SensorDataQoS().keep_last(1);
+    const auto recording_qos = rclcpp::QoS(rclcpp::KeepLast(3)).reliable();
+    if (recording_mode_ == "slam_mono") {
+      stereo_live_pub_ = create_publisher<sensor_msgs::msg::Image>(
+        "stereo/image_rect_mono", live_stereo_qos);
+      stereo_recording_pub_ = create_publisher<sensor_msgs::msg::Image>(
+        "stereo/recording/image_rect_mono", recording_qos);
+    } else if (recording_mode_ == "stereo_color") {
+      stereo_live_pub_ = create_publisher<sensor_msgs::msg::Image>(
+        "stereo/image_rect_color", live_stereo_qos);
+      stereo_recording_pub_ = create_publisher<sensor_msgs::msg::Image>(
+        "stereo/recording/image_rect_color", recording_qos);
+    }
     imu_pub_ = create_publisher<sensor_msgs::msg::Imu>("imu/data_raw", imu_qos);
     if (publish_synchronized_imu_) {
       sync_imu_pub_ = create_publisher<sensor_msgs::msg::Imu>("imu/data_sync", imu_qos);
@@ -291,8 +332,17 @@ public:
       get_logger(),
       "Video/IMU hardware synchronization enabled; calibration: %s",
       calibration_file.c_str());
+    if (stereo_recording_pub_) {
+      RCLCPP_INFO(
+        get_logger(),
+        "Atomic stereo enabled in %s mode: best-effort live plus isolated reliable recording",
+        recording_mode_.c_str());
+    }
 
     running_.store(true);
+    if (stereo_recording_pub_) {
+      recording_thread_ = std::thread(&ZedOpenCaptureNode::recordingLoop, this);
+    }
     imu_thread_ = std::thread(&ZedOpenCaptureNode::imuLoop, this);
     video_thread_ = std::thread(&ZedOpenCaptureNode::videoLoop, this);
   }
@@ -300,11 +350,22 @@ public:
   ~ZedOpenCaptureNode() override
   {
     running_.store(false);
+    recording_condition_.notify_all();
     if (video_thread_.joinable()) {
       video_thread_.join();
     }
     if (imu_thread_.joinable()) {
       imu_thread_.join();
+    }
+    if (recording_thread_.joinable()) {
+      recording_thread_.join();
+    }
+    if (stereo_recording_pub_) {
+      RCLCPP_INFO(
+        get_logger(),
+        "Atomic recording worker published %llu pairs and dropped %llu complete pairs",
+        static_cast<unsigned long long>(recording_published_),
+        static_cast<unsigned long long>(recording_dropped_));
     }
   }
 
@@ -336,17 +397,72 @@ private:
       cv::remap(right_raw, right_rect, right_map_x_, right_map_y_, cv::INTER_LINEAR);
 
       const auto stamp = toRosStamp(frame.timestamp);
-      auto left_image = makeImage(left_rect, stamp, left_frame_id_);
-      auto right_image = makeImage(right_rect, stamp, right_frame_id_);
+      auto left_image = makeImage(left_rect, stamp, left_frame_id_, "bgr8");
+      auto right_image = makeImage(right_rect, stamp, right_frame_id_, "bgr8");
       auto left_info = left_info_;
       auto right_info = right_info_;
       left_info.header.stamp = stamp;
       right_info.header.stamp = stamp;
 
+      if (stereo_live_pub_) {
+        cv::Mat stereo_recording;
+        std::string encoding;
+        if (recording_mode_ == "slam_mono") {
+          cv::Mat left_mono;
+          cv::Mat right_mono;
+          cv::cvtColor(left_rect, left_mono, cv::COLOR_BGR2GRAY);
+          cv::cvtColor(right_rect, right_mono, cv::COLOR_BGR2GRAY);
+          cv::hconcat(left_mono, right_mono, stereo_recording);
+          encoding = "mono8";
+        } else {
+          cv::hconcat(left_rect, right_rect, stereo_recording);
+          encoding = "bgr8";
+        }
+        auto stereo_message = makeImage(
+          stereo_recording, stamp, left_frame_id_, encoding);
+        stereo_live_pub_->publish(stereo_message);
+        enqueueRecording(std::move(stereo_message));
+      }
+
       left_image_pub_->publish(std::move(left_image));
       right_image_pub_->publish(std::move(right_image));
       left_info_pub_->publish(std::move(left_info));
       right_info_pub_->publish(std::move(right_info));
+    }
+  }
+
+  void enqueueRecording(sensor_msgs::msg::Image message)
+  {
+    {
+      std::lock_guard<std::mutex> lock(recording_mutex_);
+      if (recording_queue_.size() >= recording_queue_depth_) {
+        recording_queue_.pop_front();
+        ++recording_dropped_;
+      }
+      recording_queue_.push_back(std::move(message));
+    }
+    recording_condition_.notify_one();
+  }
+
+  void recordingLoop()
+  {
+    while (true) {
+      sensor_msgs::msg::Image message;
+      {
+        std::unique_lock<std::mutex> lock(recording_mutex_);
+        recording_condition_.wait(
+          lock, [this]() {return !running_.load() || !recording_queue_.empty();});
+        if (recording_queue_.empty()) {
+          if (!running_.load()) {
+            break;
+          }
+          continue;
+        }
+        message = std::move(recording_queue_.front());
+        recording_queue_.pop_front();
+      }
+      stereo_recording_pub_->publish(std::move(message));
+      ++recording_published_;
     }
   }
 
@@ -422,6 +538,7 @@ private:
   std::atomic<bool> running_{false};
   std::thread video_thread_;
   std::thread imu_thread_;
+  std::thread recording_thread_;
 
   int image_width_ = 0;
   int image_height_ = 0;
@@ -430,6 +547,8 @@ private:
   std::string left_camera_frame_id_;
   std::string right_camera_frame_id_;
   std::string imu_frame_id_;
+  std::string recording_mode_;
+  std::size_t recording_queue_depth_ = 4;
   bool publish_synchronized_imu_ = true;
   bool publish_magnetometer_ = true;
   cv::Mat left_map_x_;
@@ -443,10 +562,17 @@ private:
   rclcpp::Publisher<sensor_msgs::msg::Image>::SharedPtr right_image_pub_;
   rclcpp::Publisher<sensor_msgs::msg::CameraInfo>::SharedPtr left_info_pub_;
   rclcpp::Publisher<sensor_msgs::msg::CameraInfo>::SharedPtr right_info_pub_;
+  rclcpp::Publisher<sensor_msgs::msg::Image>::SharedPtr stereo_live_pub_;
+  rclcpp::Publisher<sensor_msgs::msg::Image>::SharedPtr stereo_recording_pub_;
   rclcpp::Publisher<sensor_msgs::msg::Imu>::SharedPtr imu_pub_;
   rclcpp::Publisher<sensor_msgs::msg::Imu>::SharedPtr sync_imu_pub_;
   rclcpp::Publisher<sensor_msgs::msg::MagneticField>::SharedPtr mag_pub_;
   std::shared_ptr<tf2_ros::StaticTransformBroadcaster> static_tf_broadcaster_;
+  std::mutex recording_mutex_;
+  std::condition_variable recording_condition_;
+  std::deque<sensor_msgs::msg::Image> recording_queue_;
+  std::uint64_t recording_published_ = 0;
+  std::uint64_t recording_dropped_ = 0;
 };
 
 int main(int argc, char ** argv)

@@ -3,6 +3,10 @@
 ROS 2 Jazzy wrapper for ZED stereo images and IMU data using Stereolabs
 [ZED Open Capture](https://github.com/stereolabs/zed-open-capture).
 
+For the shortest copy-and-paste launch instructions, see
+[`QUICK_START.md`](QUICK_START.md). For setup checks, explanations, and
+troubleshooting, see [`DEMO_COMMANDS.md`](DEMO_COMMANDS.md).
+
 ## Install
 
 The primary configuration is tested on Ubuntu 24.04 with ROS 2 Jazzy. Install
@@ -201,6 +205,79 @@ ros2 launch zed_open_capture_ros zed2i.launch.py \
 The default is HD720 at 30 FPS. Permanent defaults are in
 `config/zed2i.yaml`. Stop the running camera launch before changing modes.
 
+## Atomic stereo recording and playback
+
+Recording the two uncompressed image topics independently can drop one eye
+without dropping the other. The optional atomic streams pack each rectified
+stereo pair side by side into one `sensor_msgs/Image`. A best-effort topic
+serves live tracking without backpressure; a separate reliable topic is fed
+by a bounded worker queue for rosbag. A slow disk can therefore drop a whole
+recording pair, but cannot stall camera acquisition or split the pair. Existing
+left/right color topics are unchanged.
+
+Choose one recording mode when launching the camera:
+
+```bash
+# One-channel rectified stereo for visual SLAM (one third of BGR8 payload).
+ros2 launch zed_open_capture_ros zed2i.launch.py \
+  resolution:=VGA frame_rate:=30 recording_mode:=slam_mono
+
+# Full color for FoundationStereo and other color consumers.
+ros2 launch zed_open_capture_ros zed2i.launch.py \
+  resolution:=VGA frame_rate:=30 recording_mode:=stereo_color
+```
+
+Record the matching atomic topic in another sourced terminal. The helper uses
+indexed MCAP with a 512 MiB cache and records synchronized IMU and calibration
+without the high-rate raw IMU or diagnostic topics:
+
+```bash
+ros2 run zed_open_capture_ros record_stereo.sh \
+  slam_mono ~/ros2_ws/data/zed_slam_mono
+```
+
+Use `stereo_color` in both commands when the recording must retain color for
+FoundationStereo. The recorder uses
+`/zed/stereo/recording/image_rect_{mono,color}`; live consumers use
+`/zed/stereo/image_rect_{mono,color}`. Stop with Ctrl-C so rosbag finalizes the
+MCAP metadata. On shutdown the camera reports how many reliable pairs were
+published and how many complete pairs the bounded queue dropped. Increase
+`recording_queue_depth` only if short disk stalls cause drops and memory allows.
+
+Start consumers before playback. For example, start GF-GG in another sourced
+terminal for a mono recording:
+
+```bash
+ros2 launch gfgg_slam_ros2 zed_open_capture.launch.py \
+  start_camera:=false viewer:=true \
+  stereo_image_topic:=/zed/stereo/image_rect_mono \
+  stereo_reliability:=reliable
+```
+
+Then replay and split the atomic image back into conventional per-eye topics:
+
+```bash
+ros2 launch zed_open_capture_ros stereo_playback.launch.py \
+  bag:=~/ros2_ws/data/zed_slam_mono \
+  recording_mode:=slam_mono
+```
+
+Playback first sends a short calibration warmup and waits four seconds before
+images, allowing GF-GG to load its vocabulary without losing the beginning of
+the sequence. Override `warmup_seconds` or `rate` when needed.
+The reliable recording topic is remapped to the conventional live atomic topic
+during playback. For bags made before the topic split, add
+`recorded_stereo_topic:=/zed/stereo/image_rect_mono`.
+
+`slam_mono` playback publishes `/zed/left/image_rect_mono` and
+`/zed/right/image_rect_mono`. `stereo_color` playback publishes the existing
+`image_rect_color` names. Both outputs retain the recorded hardware timestamp;
+left and right messages from a pair therefore have exactly equal stamps.
+
+FoundationStereo accepts mono messages by expanding them to three channels,
+but its model was trained on RGB images. Use `stereo_color` when evaluating
+dense-depth quality so chromatic image information is preserved.
+
 ## View the images
 
 In another sourced terminal:
@@ -214,11 +291,11 @@ Select `/zed/left/image_rect_color` or `/zed/right/image_rect_color`.
 For RViz:
 
 ```bash
-ros2 run rviz2 rviz2
+ros2 launch zed_open_capture_ros zed2i.launch.py rviz:=true
 ```
 
-Set the fixed frame to `zed_left_camera_optical_frame`, then add `Image` and
-`TF` displays.
+The supplied layout uses `zed_left_camera_optical_frame` as its fixed frame
+and opens the rectified left and right image displays with best-effort QoS.
 
 ## Topics and checks
 
@@ -226,6 +303,10 @@ Set the fixed frame to `zed_left_camera_optical_frame`, then add `Image` and
 |---|---|
 | `/zed/left/image_rect_color` | `sensor_msgs/Image` |
 | `/zed/right/image_rect_color` | `sensor_msgs/Image` |
+| `/zed/stereo/image_rect_mono` | Best-effort atomic mono, when enabled |
+| `/zed/stereo/image_rect_color` | Best-effort atomic color, when enabled |
+| `/zed/stereo/recording/image_rect_mono` | Reliable queued mono, when enabled |
+| `/zed/stereo/recording/image_rect_color` | Reliable queued color, when enabled |
 | `/zed/left/camera_info` | `sensor_msgs/CameraInfo` |
 | `/zed/right/camera_info` | `sensor_msgs/CameraInfo` |
 | `/zed/imu/data_raw` | `sensor_msgs/Imu` |
