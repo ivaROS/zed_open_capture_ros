@@ -100,7 +100,9 @@ install(TARGETS zed_open_capture_node stereo_splitter_node
 install(DIRECTORY launch config rviz
   DESTINATION share/${PROJECT_NAME}
 )
-install(PROGRAMS scripts/record_stereo.sh
+install(PROGRAMS
+  scripts/launch_all_sensors.sh
+  scripts/record_stereo.sh
   DESTINATION lib/${PROJECT_NAME}
 )
 install(FILES LICENSE THIRD_PARTY_NOTICES.md

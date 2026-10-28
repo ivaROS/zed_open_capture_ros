@@ -1,5 +1,8 @@
 # Sensor Demo Quick Start
 
+To launch the STL-27L, OAK-D Pro, ZED, Foundation Stereo, and combined RViz
+together, see [`ALL_SENSORS.md`](ALL_SENSORS.md).
+
 Run this setup in every terminal first:
 
 ```bash

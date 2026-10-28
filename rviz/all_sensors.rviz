@@ -1,0 +1,111 @@
+Panels:
+  - Class: rviz_common/Displays
+    Name: Displays
+Visualization Manager:
+  Class: ""
+  Displays:
+    - Class: rviz_default_plugins/LaserScan
+      Color: 255; 255; 255
+      Color Transformer: Intensity
+      Decay Time: 0
+      Enabled: true
+      Name: STL-27L Scan
+      Position Transformer: XYZ
+      Selectable: true
+      Size (Pixels): 3
+      Style: Flat Squares
+      Topic:
+        Depth: 5
+        Durability Policy: Volatile
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: /scan
+      Use Fixed Frame: true
+      Value: true
+    - Class: rviz_default_plugins/Image
+      Enabled: true
+      Name: OAK RGB
+      Topic:
+        Depth: 2
+        Durability Policy: Volatile
+        History Policy: Keep Last
+        Reliability Policy: Best Effort
+        Value: /oak/rgb/image_raw
+      Normalize Range: true
+      Queue Size: 2
+      Transport Hint: raw
+      Value: true
+    - Class: rviz_default_plugins/Image
+      Enabled: true
+      Name: OAK Depth
+      Topic:
+        Depth: 2
+        Durability Policy: Volatile
+        History Policy: Keep Last
+        Reliability Policy: Best Effort
+        Value: /oak/stereo/image_raw
+      Normalize Range: true
+      Queue Size: 2
+      Transport Hint: raw
+      Value: true
+    - Class: rviz_default_plugins/Image
+      Enabled: true
+      Name: ZED Left
+      Topic:
+        Depth: 2
+        Durability Policy: Volatile
+        History Policy: Keep Last
+        Reliability Policy: Best Effort
+        Value: /zed2i/zed_node/left/image_rect_color
+      Normalize Range: true
+      Queue Size: 2
+      Transport Hint: raw
+      Value: true
+    - Class: rviz_default_plugins/Image
+      Enabled: true
+      Name: ZED Right
+      Topic:
+        Depth: 2
+        Durability Policy: Volatile
+        History Policy: Keep Last
+        Reliability Policy: Best Effort
+        Value: /zed2i/zed_node/right/image_rect_color
+      Normalize Range: true
+      Queue Size: 2
+      Transport Hint: raw
+      Value: true
+    - Class: rviz_default_plugins/Image
+      Enabled: true
+      Name: Foundation Stereo Depth
+      Topic:
+        Depth: 2
+        Durability Policy: Volatile
+        History Policy: Keep Last
+        Reliability Policy: Best Effort
+        Value: /foundation_stereo/depth
+      Normalize Range: true
+      Queue Size: 2
+      Transport Hint: raw
+      Value: true
+  Enabled: true
+  Global Options:
+    Background Color: 48; 48; 48
+    Fixed Frame: base_laser
+    Frame Rate: 30
+  Name: root
+  Tools:
+    - Class: rviz_default_plugins/Interact
+    - Class: rviz_default_plugins/MoveCamera
+    - Class: rviz_default_plugins/Select
+    - Class: rviz_default_plugins/FocusCamera
+  Value: true
+  Views:
+    Current:
+      Class: rviz_default_plugins/Orbit
+      Distance: 8
+      Target Frame: base_laser
+      Value: Orbit (rviz)
+    Saved: ~
+Window Geometry:
+  Height: 900
+  Width: 1500
