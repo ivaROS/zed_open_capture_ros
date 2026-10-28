@@ -6,6 +6,7 @@
   <description>GPU-free ROS 2 stereo image and IMU capture for ZED USB cameras.</description>
   <maintainer email="roboslam@example.com">roboslam</maintainer>
   <license>BSD-3-Clause</license>
+  <license>MIT</license>
 
   <buildtool_depend>ament_cmake</buildtool_depend>
 

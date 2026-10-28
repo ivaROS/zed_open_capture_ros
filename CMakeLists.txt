@@ -31,15 +31,16 @@ FetchContent_Declare(
 FetchContent_MakeAvailable(hidapi)
 
 # Prefer the adjacent checkout for local development. Fall back to the pinned
-# upstream revision so this ROS package can also be built on its own.
+# ivaROS revision, which includes rational-distortion calibration support for
+# current ZED factory files, so this ROS package can also be built on its own.
 get_filename_component(ZOC_SIBLING "${CMAKE_CURRENT_SOURCE_DIR}/../zed-open-capture" ABSOLUTE)
 if(EXISTS "${ZOC_SIBLING}/src/videocapture.cpp")
   set(ZOC_SOURCE_DIR "${ZOC_SIBLING}")
 else()
   FetchContent_Declare(
     zed_open_capture
-    GIT_REPOSITORY https://github.com/stereolabs/zed-open-capture.git
-    GIT_TAG 93739154903a66c112ee52c3c6fbfd83b7218617
+    GIT_REPOSITORY https://github.com/ivaROS/zed_open_capture.git
+    GIT_TAG 9077f0fcf43ee818eb488754a804bba2e496265f
   )
   FetchContent_GetProperties(zed_open_capture)
   if(NOT zed_open_capture_POPULATED)
@@ -101,6 +102,9 @@ install(DIRECTORY launch config rviz
 )
 install(PROGRAMS scripts/record_stereo.sh
   DESTINATION lib/${PROJECT_NAME}
+)
+install(FILES LICENSE THIRD_PARTY_NOTICES.md
+  DESTINATION share/${PROJECT_NAME}
 )
 
 ament_package()

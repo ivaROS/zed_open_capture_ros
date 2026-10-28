@@ -7,6 +7,22 @@ For the shortest copy-and-paste launch instructions, see
 [`QUICK_START.md`](QUICK_START.md). For setup checks, explanations, and
 troubleshooting, see [`DEMO_COMMANDS.md`](DEMO_COMMANDS.md).
 
+## Upstream attribution
+
+This package is a ROS 2 wrapper around
+[Stereolabs ZED Open Capture](https://github.com/stereolabs/zed-open-capture),
+originally authored by Stereolabs and distributed under the MIT License.
+Copyright (c) 2021 Stereolabs.
+
+The build uses the pinned
+[ivaROS ZED Open Capture fork](https://github.com/ivaROS/zed_open_capture),
+which retains the original history, license, and attribution and adds support
+for the full rational distortion model in current ZED factory calibration
+files. The wrapper-specific code is distributed under BSD-3-Clause. The full
+upstream copyright and license text is included in
+[`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md) and installed with the ROS
+package.
+
 ## Install
 
 The primary configuration is tested on Ubuntu 24.04 with ROS 2 Jazzy. Install
@@ -173,9 +189,18 @@ adjacent checkout:
 ~/ros2_ws/src/zed-open-capture
 ```
 
-When the checkout is absent, CMake downloads the pinned Open Capture revision
-during the first build. The first build therefore needs network access for any
-missing Open Capture and HIDAPI sources.
+To create the optional adjacent checkout explicitly:
+
+```bash
+cd ~/ros2_ws/src
+git clone https://github.com/ivaROS/zed_open_capture.git zed-open-capture
+```
+
+When the checkout is absent, CMake downloads the same pinned ivaROS Open
+Capture revision during the first build. This revision includes support for
+the full rational distortion model in current ZED factory calibration files,
+while retaining the legacy calibration fallback. The first build therefore
+needs network access for any missing Open Capture and HIDAPI sources.
 
 Keep `zed-open-capture/COLCON_IGNORE` when the upstream checkout is inside the
 ROS workspace `src` directory. It prevents Colcon from building the upstream
