@@ -1,0 +1,16 @@
+/oak:
+  ros__parameters:
+    driver:
+      i_enable_ir: true
+    pipeline_gen:
+      i_nn_type: none
+      i_pipeline_type: stereo
+    left:
+      i_publish_topic: true
+      i_fps: 30.0
+    right:
+      i_publish_topic: true
+      i_fps: 30.0
+    stereo:
+      i_publish_topic: false
+      i_fps: 30.0

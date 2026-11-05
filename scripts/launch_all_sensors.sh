@@ -7,8 +7,10 @@ set -eo pipefail
 
 ROS2_WS="${ROS2_WS:-/home/roboslam/ros2_ws}"
 ROS_DISTRO_NAME="${ROS_DISTRO_NAME:-jazzy}"
-ZED_RESOLUTION="${ZED_RESOLUTION:-VGA}"
+ZED_RESOLUTION="${ZED_RESOLUTION:-HD720}"
 ZED_FRAME_RATE="${ZED_FRAME_RATE:-30}"
+OAK_FRAME_RATE="${OAK_FRAME_RATE:-30}"
+OAK_IMAGE_MODE="${OAK_IMAGE_MODE:-raw}"
 FOUNDATION_RATE_HZ="${FOUNDATION_RATE_HZ:-3.0}"
 FOUNDATION_THREADS="${FOUNDATION_THREADS:-2}"
 FOUNDATION_MODEL="${FOUNDATION_MODEL:-${ROS2_WS}/src/Fast-FoundationStereo/output_cpu_onnx/20_30_48_iters1_192x352_disp64/fast_foundationstereo.onnx}"
@@ -42,6 +44,24 @@ for package in ldlidar_stl_ros2 depthai_ros_driver_v3 zed_open_capture_ros found
     exit 1
   fi
 done
+
+case "${OAK_FRAME_RATE}" in
+  30) OAK_PROFILE_NAME="oak_stereo_only.yaml" ;;
+  60) OAK_PROFILE_NAME="oak_stereo_only_60hz.yaml" ;;
+  *)
+    echo "OAK_FRAME_RATE must be 30 or 60" >&2
+    exit 1
+    ;;
+esac
+if [[ "${OAK_IMAGE_MODE}" != rectified && "${OAK_IMAGE_MODE}" != raw ]]; then
+  echo "OAK_IMAGE_MODE must be rectified or raw" >&2
+  exit 1
+fi
+OAK_PARAMS_FILE="${OAK_PARAMS_FILE:-$(ros2 pkg prefix --share zed_open_capture_ros)/config/${OAK_PROFILE_NAME}}"
+if [[ ! -r "${OAK_PARAMS_FILE}" ]]; then
+  echo "OAK stereo-only configuration not found: ${OAK_PARAMS_FILE}" >&2
+  exit 1
+fi
 
 if ! ros2 pkg prefix laser_filters >/dev/null 2>&1; then
   echo "Required dependency not found: laser_filters" >&2
@@ -107,15 +127,17 @@ start_process() {
 
 trap cleanup INT TERM EXIT
 
-echo "Sensor settings: ZED ${ZED_RESOLUTION} @ ${ZED_FRAME_RATE} Hz; Foundation Stereo up to ${FOUNDATION_RATE_HZ} Hz"
+echo "Sensor settings: OAK ${OAK_IMAGE_MODE} stereo @ ${OAK_FRAME_RATE} Hz; ZED ${ZED_RESOLUTION} @ ${ZED_FRAME_RATE} Hz; Foundation Stereo up to ${FOUNDATION_RATE_HZ} Hz"
 echo "Press Ctrl-C once to stop everything."
 
 start_process "STL-27L lidar" \
   ros2 launch ldlidar_stl_ros2 stl27l.launch.py
 
 start_process "OAK-D Pro" \
-  ros2 launch depthai_ros_driver_v3 driver.launch.py \
-    camera_model:=OAK-D-PRO use_rviz:=false
+  ros2 launch zed_open_capture_ros oak_stereo.launch.py \
+    frame_rate:="${OAK_FRAME_RATE}" \
+    image_mode:="${OAK_IMAGE_MODE}" \
+    params_file:="${OAK_PARAMS_FILE}"
 
 start_process "ZED 2i" \
   ros2 launch zed_open_capture_ros zed2i.launch.py \

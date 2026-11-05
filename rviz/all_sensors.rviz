@@ -24,26 +24,26 @@ Visualization Manager:
       Value: true
     - Class: rviz_default_plugins/Image
       Enabled: true
-      Name: OAK RGB
+      Name: OAK Left Raw
       Topic:
         Depth: 2
         Durability Policy: Volatile
         History Policy: Keep Last
         Reliability Policy: Best Effort
-        Value: /oak/rgb/image_raw
+        Value: /oak/left/image_raw
       Normalize Range: true
       Queue Size: 2
       Transport Hint: raw
       Value: true
     - Class: rviz_default_plugins/Image
       Enabled: true
-      Name: OAK Depth
+      Name: OAK Right Raw
       Topic:
         Depth: 2
         Durability Policy: Volatile
         History Policy: Keep Last
         Reliability Policy: Best Effort
-        Value: /oak/stereo/image_raw
+        Value: /oak/right/image_raw
       Normalize Range: true
       Queue Size: 2
       Transport Hint: raw
