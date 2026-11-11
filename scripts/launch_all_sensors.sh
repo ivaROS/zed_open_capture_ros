@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-# Launch the STL-27L lidar, OAK-D Pro, ZED 2i, Foundation Stereo, and RViz.
+# Launch the STL-27L lidar, OAK-D Pro, ZED 2i, Foundation Stereo, and optionally RViz.
 # Ctrl-C shuts down every process started by this script.
 
 set -eo pipefail
@@ -14,7 +14,8 @@ OAK_IMAGE_MODE="${OAK_IMAGE_MODE:-raw}"
 FOUNDATION_RATE_HZ="${FOUNDATION_RATE_HZ:-3.0}"
 FOUNDATION_THREADS="${FOUNDATION_THREADS:-2}"
 FOUNDATION_MODEL="${FOUNDATION_MODEL:-${ROS2_WS}/src/Fast-FoundationStereo/output_cpu_onnx/20_30_48_iters1_192x352_disp64/fast_foundationstereo.onnx}"
-START_RVIZ="${START_RVIZ:-true}"
+# START_RVIZ="${START_RVIZ:-true}"
+START_RVIZ="${START_RVIZ:-false}"
 
 if [[ ! -r "/opt/ros/${ROS_DISTRO_NAME}/setup.bash" ]]; then
   echo "ROS 2 ${ROS_DISTRO_NAME} was not found under /opt/ros." >&2
@@ -57,7 +58,9 @@ if [[ "${OAK_IMAGE_MODE}" != rectified && "${OAK_IMAGE_MODE}" != raw ]]; then
   echo "OAK_IMAGE_MODE must be rectified or raw" >&2
   exit 1
 fi
-OAK_PARAMS_FILE="${OAK_PARAMS_FILE:-$(ros2 pkg prefix --share zed_open_capture_ros)/config/${OAK_PROFILE_NAME}}"
+# OAK_PARAMS_FILE="${OAK_PARAMS_FILE:-$(ros2 pkg prefix --share zed_open_capture_ros)/config/${OAK_PROFILE_NAME}}"
+# On-device rectified stereo, IR projector off. OAK_FRAME_RATE does not apply to this file.
+OAK_PARAMS_FILE="${OAK_PARAMS_FILE:-$(ros2 pkg prefix --share zed_open_capture_ros)/config/routemapper_oak.yaml}"
 if [[ ! -r "${OAK_PARAMS_FILE}" ]]; then
   echo "OAK stereo-only configuration not found: ${OAK_PARAMS_FILE}" >&2
   exit 1
@@ -127,11 +130,12 @@ start_process() {
 
 trap cleanup INT TERM EXIT
 
-echo "Sensor settings: OAK ${OAK_IMAGE_MODE} stereo @ ${OAK_FRAME_RATE} Hz; ZED ${ZED_RESOLUTION} @ ${ZED_FRAME_RATE} Hz; Foundation Stereo up to ${FOUNDATION_RATE_HZ} Hz"
+echo "Sensor settings: OAK $(basename "${OAK_PARAMS_FILE}"); ZED ${ZED_RESOLUTION} @ ${ZED_FRAME_RATE} Hz; Foundation Stereo up to ${FOUNDATION_RATE_HZ} Hz"
 echo "Press Ctrl-C once to stop everything."
 
+# Unfiltered /scan. Previously: ros2 launch ldlidar_stl_ros2 stl27l.launch.py
 start_process "STL-27L lidar" \
-  ros2 launch ldlidar_stl_ros2 stl27l.launch.py
+  ros2 launch ldlidar_stl_ros2 routemapper_lidar.launch.py
 
 start_process "OAK-D Pro" \
   ros2 launch zed_open_capture_ros oak_stereo.launch.py \

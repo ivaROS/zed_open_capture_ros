@@ -1,0 +1,17 @@
+# OAK-D Pro on the routemapper backpack: on-device rectified stereo
+# (/oak/left/image_rect, /oak/right/image_rect, mono8), IR projector off.
+/oak:
+  ros__parameters:
+    driver:
+      i_enable_ir: false
+    pipeline_gen:
+      i_nn_type: none
+      i_pipeline_type: depth
+      i_enable_imu: true
+    stereo:
+      i_publish_topic: false
+      i_fps: 30.0
+      i_left_rect_publish_topic: true
+      i_right_rect_publish_topic: true
+    imu:
+      i_enable_rotation: false
