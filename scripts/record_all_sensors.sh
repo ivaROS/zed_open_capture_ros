@@ -10,8 +10,9 @@
 #
 # The ZED node publishes raw images only, so this script starts two
 # image_transport republishers (JPEG) for the ZED pair and stops them on exit.
-# OAK compressed images come from the DepthAI driver. Rectified OAK images are
-# recorded when present, raw ones otherwise.
+# OAK compressed images come from the DepthAI driver. Both rectified and raw
+# OAK image topics are listed; only the one the OAK profile publishes has data.
+# The THETA image is recorded when theta_publisher.py is running.
 #
 # Stop with Ctrl-C once so the bag is finalized.
 
@@ -74,7 +75,8 @@ trap 'cleanup; exit 130' INT
 trap 'cleanup; exit 143' TERM
 trap cleanup EXIT
 
-AVAILABLE="$(ros2 topic list)"
+# Fresh discovery; a newly started daemon can return an incomplete list.
+AVAILABLE="$(ros2 topic list --no-daemon --spin-time 3)"
 has_topic() {
   grep -qx -- "$1" <<< "${AVAILABLE}"
 }
@@ -97,12 +99,6 @@ for side in left right; do
   REPUB_PIDS+=("$!")
 done
 
-if has_topic /oak/left/image_rect; then
-  OAK_IMAGE=image_rect
-else
-  OAK_IMAGE=image_raw
-fi
-
 TOPICS=(
   /tf
   /tf_static
@@ -117,18 +113,20 @@ TOPICS=(
   "${ZED_NS}/imu/data_raw"
   "${ZED_NS}/imu/data_sync"
   "${ZED_NS}/imu/mag"
-  "/oak/left/${OAK_IMAGE}/compressed"
-  "/oak/right/${OAK_IMAGE}/compressed"
+  /oak/left/image_rect/compressed
+  /oak/right/image_rect/compressed
+  /oak/left/image_raw/compressed
+  /oak/right/image_raw/compressed
   /oak/left/camera_info
   /oak/right/camera_info
   /oak/imu/data
   /scan
+  /theta/image_raw/compressed
 )
 TOPICS+=("${EXTRA_TOPICS[@]}")
 
 {
   echo "start: $(date --iso-8601=seconds)"
-  echo "oak_images: ${OAK_IMAGE}"
   echo "zed_jpeg_quality: ${ZED_JPEG_QUALITY}"
   echo "mcap_preset: ${MCAP_PRESET}"
   echo "topics:"
@@ -148,7 +146,7 @@ echo "Recording to ${BAG_DIR}"
 MISSING=()
 for topic in "${TOPICS[@]}"; do
   case "${topic}" in
-    "${ZED_NS}"/*/image_rect_color/compressed) continue ;;
+    "${ZED_NS}"/*/image_rect_color/compressed | /oak/*/image_r*/compressed) continue ;;
   esac
   has_topic "${topic}" || MISSING+=("${topic}")
 done
