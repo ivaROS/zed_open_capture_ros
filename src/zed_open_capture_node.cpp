@@ -360,6 +360,9 @@ public:
     if (recording_thread_.joinable()) {
       recording_thread_.join();
     }
+    RCLCPP_INFO(
+      get_logger(), "Dropped %llu camera frames with USB transfer errors",
+      static_cast<unsigned long long>(video_capture_->getErrorFrameCount()));
     if (stereo_recording_pub_) {
       RCLCPP_INFO(
         get_logger(),
@@ -373,9 +376,23 @@ private:
   void videoLoop()
   {
     std::uint64_t last_timestamp = 0;
+    std::uint64_t reported_error_frames = 0;
+    // Own copy of each frame: the capture thread reuses its frame buffer for the
+    // next image, so reading it in place can mix two frames.
+    std::vector<std::uint8_t> frame_buffer;
+    sl_oc::video::Frame frame;
     while (rclcpp::ok() && running_.load()) {
-      const auto & frame = video_capture_->getLastFrame(100);
-      if (frame.data == nullptr || frame.timestamp == 0 || frame.timestamp == last_timestamp) {
+      const std::uint64_t error_frames = video_capture_->getErrorFrameCount();
+      if (error_frames != reported_error_frames) {
+        RCLCPP_WARN_THROTTLE(
+          get_logger(), *get_clock(), 10000,
+          "Dropped %llu camera frames with USB transfer errors so far",
+          static_cast<unsigned long long>(error_frames));
+        reported_error_frames = error_frames;
+      }
+      if (!video_capture_->getLastFrameCopy(frame, frame_buffer, 100) ||
+        frame.timestamp == 0 || frame.timestamp == last_timestamp)
+      {
         continue;
       }
       last_timestamp = frame.timestamp;

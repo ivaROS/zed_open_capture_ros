@@ -40,7 +40,7 @@ else()
   FetchContent_Declare(
     zed_open_capture
     GIT_REPOSITORY https://github.com/ivaROS/zed_open_capture.git
-    GIT_TAG 9077f0fcf43ee818eb488754a804bba2e496265f
+    GIT_TAG b2b079e2bc8ffe692eee7723f5350bdca57a0d7e
   )
   FetchContent_GetProperties(zed_open_capture)
   if(NOT zed_open_capture_POPULATED)
