@@ -15,3 +15,5 @@
       i_right_rect_publish_topic: true
     imu:
       i_enable_rotation: false
+      i_batch_report_threshold: 1   # 5 (driver default)
+      i_enable_mag: false   # true (driver default)
