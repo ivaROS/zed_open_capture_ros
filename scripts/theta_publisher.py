@@ -25,7 +25,12 @@ import fractions
 import threading
 import time
 
-import gi
+# GStreamer links libunwind, whose _Unwind_* symbols would otherwise also serve
+# the C++ exceptions in the ROS 2 middleware and crash it. Load the GCC
+# unwinder into the global scope first so it is the one found.
+ctypes.CDLL('libgcc_s.so.1', mode=ctypes.RTLD_GLOBAL)
+
+import gi  # noqa: E402
 gi.require_version('Gst', '1.0')
 from gi.repository import Gst  # noqa: E402
 
