@@ -133,6 +133,10 @@ trap cleanup INT TERM EXIT
 echo "Sensor settings: OAK $(basename "${OAK_PARAMS_FILE}"); ZED ${ZED_RESOLUTION} @ ${ZED_FRAME_RATE} Hz; Foundation Stereo up to ${FOUNDATION_RATE_HZ} Hz"
 echo "Press Ctrl-C once to stop everything."
 
+# Rig description: /robot_description and base_link -> lidar, ZED, OAK and THETA root frames.
+start_process "rig TF" \
+  ros2 launch zed_open_capture_ros routemapper_tf.launch.py
+
 # Unfiltered /scan. Previously: ros2 launch ldlidar_stl_ros2 stl27l.launch.py
 start_process "STL-27L lidar" \
   ros2 launch ldlidar_stl_ros2 routemapper_lidar.launch.py

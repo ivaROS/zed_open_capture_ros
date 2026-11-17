@@ -1,0 +1,42 @@
+<?xml version="1.0"?>
+<!-- Routemapper backpack: base_link and the root frame of each sensor. Published by the rig robot_state_publisher
+     (zed_open_capture_ros/launch/routemapper_tf.launch.py); the drivers publish everything below their roots
+     (ZED node: zed_left_camera_frame -> optical, right camera, IMU; OAK driver: oak -> cameras, IMU from the device
+     calibration). Values from scripts/rig_tf.py.
+     base_link: bottom of the STL-27L base, x forward, y left, z up.
+     base_laser: STL-27L scan frame, mount CAD (scan data: +91.5 deg yaw).
+     zed_left_camera_frame: ZED node root; CAD left optical frame (-0.0110, 0.0602, 0.1189), facing backward,
+       upside down.
+     oak: OAK driver root (the RGB camera frame); placed so that oak_left_camera_optical_frame is the rectified left
+       camera (device calibration flashed 2026-11-16 from Kalibr take A) at (0.2479, 0.0347, 0.5872): CAD "Routemapper
+       Version With Cameras" (71bce97) with the bracket tab pointing up; rotation from the gyros, Kalibr B4 and the
+       device rectification.
+     theta_link: frame of /theta/image_raw; lens centre from the CAD (x, y) and the mount photo (z). Orientation
+       assumed upright with x forward; not yet checked against a THETA image. -->
+<robot name="routemapper">
+  <link name="base_link"/>
+  <link name="base_laser"/>
+  <joint name="base_laser_joint" type="fixed">
+    <parent link="base_link"/>
+    <child link="base_laser"/>
+    <origin xyz="0.0000 0.0000 0.0257" rpy="0.00000 0.00000 1.57080"/>
+  </joint>
+  <link name="zed_left_camera_frame"/>
+  <joint name="zed_joint" type="fixed">
+    <parent link="base_link"/>
+    <child link="zed_left_camera_frame"/>
+    <origin xyz="-0.0110 0.0602 0.1189" rpy="3.14159 0.00000 3.14159"/>
+  </joint>
+  <link name="oak"/>
+  <joint name="oak_joint" type="fixed">
+    <parent link="base_link"/>
+    <child link="oak"/>
+    <origin xyz="0.24601 -0.00273 0.58829" rpy="-0.02800 0.04314 -0.03089"/>
+  </joint>
+  <link name="theta_link"/>
+  <joint name="theta_joint" type="fixed">
+    <parent link="base_link"/>
+    <child link="theta_link"/>
+    <origin xyz="0.178 -0.003 0.689" rpy="0.00000 0.00000 0.00000"/>
+  </joint>
+</robot>
