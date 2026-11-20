@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Print one line every 10 s: each sensor's message rate, and PROBLEM if one is missing or too slow.
 
-  15:30:20  OK       OAK-L 30.0  OAK-R 30.0  OAK-IMU 401  ZED-L 30.0  ZED-R 30.0  ZED-IMU 405  Lidar 9.9  THETA 1.0
+  15:30:20  OK       OAK-L 30.0  OAK-R 30.0  OAK-IMU 401  ZED-L 30.0  ZED-R 30.0  ZED-IMU 405  Lidar 9.9  THETA 5.0
   15:30:30  PROBLEM  THETA: no data | OAK-L 30.0  OAK-R 30.0  ...
 
 Usage: python3 sensor_monitor.py
@@ -23,7 +23,7 @@ SENSORS = [
     ('ZED-R', '/zed2i/zed_node/right/camera_info', CameraInfo, 27),
     ('ZED-IMU', '/zed2i/zed_node/imu/data_raw', Imu, 360),
     ('Lidar', '/scan', LaserScan, 9),
-    ('THETA', '/theta/image_raw/compressed', CompressedImage, 0.5),
+    ('THETA', '/theta/image_raw/compressed', CompressedImage, 4.5),
 ]
 
 

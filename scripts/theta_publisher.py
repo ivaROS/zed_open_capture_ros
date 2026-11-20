@@ -8,7 +8,7 @@ sensor_msgs/CompressedImage on <topic>/compressed.
 
 Parameters:
   mode          4k (3840x1920) or 2k (1920x960), default 4k
-  rate          output rate in Hz, default 1.0 (0.1 also works)
+  rate          output rate in Hz, default 5.0 (0.1 also works)
   jpeg_quality  default 90
   frame_id      default theta_link
   topic         default /theta/image_raw
@@ -87,7 +87,7 @@ class ThetaPublisher(Node):
     def __init__(self):
         super().__init__('theta')
         mode = self.declare_parameter('mode', '4k').value
-        rate = float(self.declare_parameter('rate', 1.0).value)
+        rate = float(self.declare_parameter('rate', 5.0).value)
         quality = int(self.declare_parameter('jpeg_quality', 90).value)
         self.frame_id = self.declare_parameter('frame_id', 'theta_link').value
         topic = self.declare_parameter('topic', '/theta/image_raw').value
